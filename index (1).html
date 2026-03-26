@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus OS | Neural Vault</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.294.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
+      }
+    }
+    </script>
+    <style>
+        :root {
+            --orange: #f97316;
+            --orange-dim: rgba(249,115,22,0.15);
+            --glass: rgba(12,12,12,0.75);
+            --border: rgba(255,255,255,0.08);
+        }
+        * { box-sizing: border-box; }
+        body { 
+            background: #050505; 
+            color: #e8e8e8; 
+            font-family: 'Space Mono', monospace; 
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        h1, h2, h3, .syne { font-family: 'Syne', sans-serif; }
+        .glass { 
+            background: var(--glass); 
+            backdrop-filter: blur(24px); 
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border); 
+        }
+        .masonry { column-count: 2; column-gap: 12px; }
+        @media (min-width: 640px) { .masonry { column-count: 3; column-gap: 16px; } }
+        .masonry-item { break-inside: avoid; margin-bottom: 12px; }
+        .orange-glow { box-shadow: 0 0 0 1px rgba(249,115,22,0.25), 0 0 24px rgba(249,115,22,0.12); }
+        .pin-glow { box-shadow: 0 0 0 1px rgba(249,115,22,0.5), 0 4px 24px rgba(249,115,22,0.25); }
+        .bg-grid { 
+            background-color: #050505;
+            background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .animate-spin { animation: spin 0.8s linear infinite; }
+        .animate-in { animation: fadeUp 0.25s ease-out forwards; }
+        .blink { animation: blink 1.5s ease-in-out infinite; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        iframe, video { border-radius: 16px; background: #000; }
+        input, textarea { caret-color: var(--orange); }
+        .tag-chip { 
+            display: inline-flex; align-items: center; gap: 4px;
+            background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.25);
+            color: #f97316; font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; padding: 3px 10px; border-radius: 999px;
+        }
+        .btn-action {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            width: 100%; padding: 14px; border-radius: 16px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+            transition: transform 0.1s, opacity 0.15s;
+            cursor: pointer; border: none;
+        }
+        .btn-action:active { transform: scale(0.96); }
+        .btn-primary { background: #f97316; color: #000; }
+        .btn-secondary { background: rgba(255,255,255,0.06); color: #888; border: 1px solid var(--border); }
+        .btn-pin { background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.3); }
+        .btn-danger { background: transparent; color: rgba(239,68,68,0.6); font-size: 10px; padding: 12px; }
+        .btn-danger:hover { color: rgb(239,68,68); }
+        .btn-ai { background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(251,191,36,0.08)); color: #fb923c; border: 1px solid rgba(249,115,22,0.25); }
+        .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.94); display: flex; align-items: flex-end; justify-content: center; padding: 16px; }
+        @media (min-width: 640px) { .modal-overlay { align-items: center; } }
+    </style>
+</head>
+<body class="bg-grid">
+<div id="root"></div>
+
+<script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+        Search, Sparkles, X, Link as LinkIcon, FileText, Play, Send, Bot,
+        Clock, Folder, ExternalLink, Trash2, Settings, Star, Share2,
+        RefreshCw, Loader, Tag, ChevronRight, LayoutGrid, Plus
+    } from 'lucide-react';
+    import { initializeApp } from "firebase/app";
+    import { getFirestore, collection, onSnapshot, query, addDoc, doc, deleteDoc, updateDoc } from "firebase/firestore";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+
+    /* ═══ FIREBASE ═══ */
+    const firebaseConfig = {
+        apiKey: "AIzaSyCeblEX23K0Ezqh0Qf3SL4K72tTeyZ4tqI",
+        authDomain: "pixelvault-bfbba.firebaseapp.com",
+        projectId: "pixelvault-bfbba",
+        storageBucket: "pixelvault-bfbba.firebasestorage.app",
+        messagingSenderId: "407841785304",
+        appId: "1:407841785304:web:9a132f1bc3aaf60e791ead",
+        measurementId: "G-LHR0ZEJE5J"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const APP_ID = 'nexus-v3';
+
+    /* ═══ HELPERS ═══ */
+    const getYtId = (url) => {
+        const m = url?.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/))([A-Za-z0-9_-]{11})/);
+        return m ? m[1] : null;
+    };
+
+    const getMediaType = (url) => {
+        if (!url) return 'link';
+        if (getYtId(url)) return 'youtube';
+        if (url.includes('.m3u8')) return 'hls';
+        if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) return 'video';
+        if (url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?.*)?$/i)) return 'image';
+        return 'link';
+    };
+
+    /* Microlink.io — free OG meta + thumbnail for ANY URL */
+    const fetchSmartMeta = async (url) => {
+        if (!url) return { thumb: null, title: null };
+        // YouTube fast path
+        const ytId = getYtId(url);
+        if (ytId) return { thumb: `https://i3.ytimg.com/vi/${ytId}/maxresdefault.jpg`, title: null };
+        // Direct image
+        if (url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp)(\?.*)?$/i)) return { thumb: url, title: null };
+        // Videos
+        if (url.match(/\.(mp4|webm|ogg|m3u8)(\?.*)?$/i)) return { thumb: null, title: null };
+        // Microlink for Instagram, Pinterest, Twitter, any site
+        try {
+            const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
+            if (!res.ok) return { thumb: null, title: null };
+            const data = await res.json();
+            if (data.status === 'success') {
+                return {
+                    thumb: data.data?.image?.url || data.data?.logo?.url || null,
+                    title: data.data?.title || null,
+                    description: data.data?.description || null
+                };
+            }
+        } catch {}
+        return { thumb: null, title: null };
+    };
+
+    /* Gemini 2.0 Flash */
+    const callGemini = async (key, prompt) => {
+        const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+            { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] }) }
+        );
+        const d = await r.json();
+        if (d.error) throw new Error(d.error.message);
+        return d.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
+    };
+
+    /* ═══ GRID NODE ═══ */
+    const GridNode = ({ item, onClick }) => {
+        const [err, setErr] = useState(false);
+        const isNote = item.type === 'note';
+        const isVideo = ['youtube','hls','video'].includes(item.type);
+        const thumb = item.thumb;
+
+        return (
+            <div
+                onClick={() => onClick(item)}
+                className={`masonry-item glass rounded-2xl overflow-hidden cursor-pointer group transition-all duration-200 hover:scale-[1.02] relative min-h-[120px] ${item.pinned ? 'pin-glow' : 'orange-glow'}`}
+                style={{ animationFillMode:'both' }}
+            >
+                {item.pinned && (
+                    <div className="absolute top-2 right-2 z-10 bg-orange-500 p-1.5 rounded-full shadow-lg">
+                        <Star className="w-2.5 h-2.5 text-black fill-black" />
+                    </div>
+                )}
+                {item.collection && (
+                    <div className="absolute top-2 left-2 z-10">
+                        <span className="tag-chip">{item.collection}</span>
+                    </div>
+                )}
+
+                {isNote ? (
+                    <div className="p-4 min-h-[160px] flex flex-col justify-between" style={{background:'linear-gradient(135deg,rgba(249,115,22,0.08) 0%,transparent 100%)'}}>
+                        <FileText className="w-4 h-4 text-orange-500/50 mb-2" />
+                        <p className="text-[11px] text-gray-400 line-clamp-5 leading-relaxed flex-1">{item.content}</p>
+                        <p className="text-[9px] font-bold text-white/60 uppercase tracking-widest mt-3 truncate">{item.title}</p>
+                    </div>
+                ) : (!thumb || err) ? (
+                    <div className="p-5 min-h-[140px] flex flex-col items-center justify-center" style={{background:'#0a0a0a'}}>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center mb-3" style={{background:'rgba(249,115,22,0.08)'}}>
+                            {item.type === 'youtube' ? <Play className="w-4 h-4 text-red-400" /> : <LinkIcon className="w-4 h-4 text-orange-500" />}
+                        </div>
+                        <p className="text-[9px] font-bold text-gray-500 uppercase text-center line-clamp-2 px-2">{item.title || item.site || 'Saved Link'}</p>
+                        {item.site && <p className="text-[8px] text-gray-700 mt-1">{item.site}</p>}
+                    </div>
+                ) : (
+                    <div className="relative">
+                        <img
+                            src={thumb}
+                            referrerPolicy="no-referrer"
+                            onError={() => setErr(true)}
+                            className="w-full h-auto block"
+                            style={{background:'#0a0a0a', display:'block'}}
+                            alt=""
+                            loading="lazy"
+                        />
+                        {isVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="bg-black/60 backdrop-blur-sm p-3 rounded-full border border-white/10 group-hover:scale-110 transition-transform">
+                                    <Play className="w-4 h-4 text-white fill-white" />
+                                </div>
+                            </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{background:'linear-gradient(to top, rgba(0,0,0,0.95), transparent)'}}>
+                            <p className="text-[9px] font-bold text-white uppercase tracking-wide truncate">{item.title}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    /* ═══ TIMELINE ═══ */
+    const TimelineView = ({ items, onClose, onSelect }) => {
+        const grouped = useMemo(() => {
+            const g = {};
+            [...items].sort((a,b) => (b.savedAt||0)-(a.savedAt||0)).forEach(item => {
+                const d = new Date(item.savedAt||Date.now());
+                const key = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+                if (!g[key]) g[key] = [];
+                g[key].push(item);
+            });
+            return Object.entries(g);
+        }, [items]);
+
+        return (
+            <div className="fixed inset-0 z-[100] overflow-y-auto hide-scroll" style={{background:'rgba(5,5,5,0.98)'}}>
+                <div className="max-w-lg mx-auto p-4 pb-20">
+                    <div className="flex justify-between items-center pt-6 mb-8">
+                        <h2 className="syne text-2xl font-black flex items-center gap-3">
+                            <Clock className="w-5 h-5 text-orange-500" /> Timeline
+                        </h2>
+                        <button onClick={onClose} className="glass w-10 h-10 rounded-full flex items-center justify-center">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                    {grouped.map(([date, dayItems]) => (
+                        <div key={date} className="mb-8">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="h-px flex-1" style={{background:'var(--border)'}} />
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-orange-500">{date}</span>
+                                <div className="h-px flex-1" style={{background:'var(--border)'}} />
+                            </div>
+                            <div className="space-y-2">
+                                {dayItems.map(item => (
+                                    <div key={item.id}
+                                        onClick={() => { onSelect(item); onClose(); }}
+                                        className="glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer hover:border-orange-500/20 transition-colors animate-in"
+                                    >
+                                        {item.thumb ? (
+                                            <img src={item.thumb} referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" style={{background:'#111'}} onError={e=>e.target.style.display='none'} alt="" />
+                                        ) : (
+                                            <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center" style={{background:'rgba(249,115,22,0.08)'}}>
+                                                {item.type==='note' ? <FileText className="w-4 h-4 text-orange-500" /> : <LinkIcon className="w-4 h-4 text-orange-500" />}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold truncate">{item.title || 'Untitled'}</p>
+                                            <p className="text-[9px] text-gray-600 mt-0.5 uppercase">{item.site} · {new Date(item.savedAt||0).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</p>
+                                        </div>
+                                        {item.pinned && <Star className="w-3 h-3 text-orange-500 fill-orange-500 flex-shrink-0" />}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    {grouped.length === 0 && (
+                        <div className="text-center py-20 text-gray-700 text-sm">Nothing saved yet.</div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ COLLECTIONS ═══ */
+    const CollectionsView = ({ items, onClose, onFilter }) => {
+        const cols = useMemo(() => {
+            const m = {};
+            items.forEach(i => {
+                const c = i.collection?.trim() || '— Untagged';
+                m[c] = (m[c]||0) + 1;
+            });
+            return Object.entries(m).sort((a,b) => b[1]-a[1]);
+        }, [items]);
+
+        const COLORS = ['#f97316','#fb923c','#fbbf24','#a3e635','#34d399','#38bdf8','#818cf8','#e879f9'];
+
+        return (
+            <div className="fixed inset-0 z-[100] overflow-y-auto hide-scroll" style={{background:'rgba(5,5,5,0.98)'}}>
+                <div className="max-w-lg mx-auto p-4 pb-20">
+                    <div className="flex justify-between items-center pt-6 mb-8">
+                        <h2 className="syne text-2xl font-black flex items-center gap-3">
+                            <Folder className="w-5 h-5 text-orange-500" /> Collections
+                        </h2>
+                        <button onClick={onClose} className="glass w-10 h-10 rounded-full flex items-center justify-center">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        {cols.map(([name, count], i) => {
+                            const color = COLORS[i % COLORS.length];
+                            const isUntagged = name === '— Untagged';
+                            return (
+                                <button key={name}
+                                    onClick={() => { onFilter(isUntagged ? null : name); onClose(); }}
+                                    className="glass rounded-2xl p-5 text-left hover:border-white/20 transition-colors animate-in"
+                                    style={{animationDelay:`${i*0.04}s`}}
+                                >
+                                    <div className="w-8 h-8 rounded-xl mb-3 flex items-center justify-center" style={{background:`${color}18`}}>
+                                        <Folder className="w-4 h-4" style={{color}} />
+                                    </div>
+                                    <p className="font-bold text-sm truncate text-white" style={{fontFamily:'Syne,sans-serif'}}>{name}</p>
+                                    <p className="text-[9px] text-gray-600 mt-1 uppercase">{count} fragment{count!==1?'s':''}</p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {cols.length === 0 && <div className="text-center py-20 text-gray-700 text-sm">No collections yet.</div>}
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ SETTINGS ═══ */
+    const SettingsModal = ({ onClose, geminiKey, setGeminiKey }) => {
+        const [k, setK] = useState(geminiKey);
+        const save = () => { setGeminiKey(k); localStorage.setItem('nxs_gemini', k); onClose(); };
+        return (
+            <div className="modal-overlay animate-in" onClick={e => e.target===e.currentTarget && onClose()}>
+                <div className="w-full max-w-md glass rounded-[28px] p-7 shadow-2xl">
+                    <div className="flex justify-between items-center mb-7">
+                        <h2 className="syne text-xl font-black flex items-center gap-2"><Settings className="w-5 h-5 text-orange-500" /> Settings</h2>
+                        <button onClick={onClose}><X className="w-5 h-5 text-gray-600" /></button>
+                    </div>
+                    <div className="space-y-4">
+                        <div>
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">Gemini AI Key</p>
+                            <input
+                                type="password"
+                                className="w-full p-4 rounded-2xl text-sm outline-none font-mono"
+                                style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                                placeholder="AIzaSy..."
+                                value={k} onChange={e=>setK(e.target.value)}
+                                onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                                onBlur={e=>e.target.style.borderColor='var(--border)'}
+                            />
+                            <p className="text-[9px] text-gray-700 mt-2">Free key → aistudio.google.com</p>
+                        </div>
+                        <button onClick={save} className="btn-action btn-primary">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ AI PANEL ═══ */
+    const AiPanel = ({ item, geminiKey, onClose }) => {
+        const [response, setResponse] = useState('');
+        const [loading, setLoading] = useState(false);
+        const [q, setQ] = useState('');
+        const inputRef = useRef(null);
+
+        const ask = async (prompt) => {
+            if (!geminiKey) { setResponse('⚠️ No Gemini API key. Set it in Settings (top-right).'); return; }
+            setLoading(true); setResponse('');
+            try {
+                const res = await callGemini(geminiKey, prompt);
+                setResponse(res);
+            } catch(e) { setResponse('Error: ' + e.message); }
+            setLoading(false);
+        };
+
+        const ctx = item ? `Title: "${item.title||''}", URL: ${item.url||'N/A'}, Site: ${item.site||''}, ${item.content?'Note: '+item.content:''}` : '';
+        const quick = [
+            { label: '✦ Summarize', p: `Summarize this saved item in 2-3 bullet points. ${ctx}` },
+            { label: '✦ Key Facts', p: `List 4-5 key facts or insights about this. ${ctx}` },
+            { label: '✦ Related', p: `Suggest 5 related topics or YouTube searches for this. ${ctx}` },
+            { label: '✦ Why save?', p: `Why would someone save this? What's the value? ${ctx}` },
+        ];
+
+        return (
+            <div className="fixed inset-0 z-[200] flex flex-col p-4 animate-in" style={{background:'rgba(5,5,5,0.99)'}}>
+                <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                    <h3 className="syne font-black text-lg flex items-center gap-2">
+                        <Bot className="w-5 h-5 text-orange-500" /> Neural AI
+                        {!geminiKey && <span className="text-[9px] text-red-400 bg-red-400/10 px-2 py-1 rounded-full ml-2">No key</span>}
+                    </h3>
+                    <button onClick={onClose} className="glass w-9 h-9 rounded-full flex items-center justify-center">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                {item && (
+                    <div className="glass rounded-2xl p-3 mb-4 flex items-center gap-3 flex-shrink-0">
+                        {item.thumb && <img src={item.thumb} referrerPolicy="no-referrer" className="w-10 h-10 rounded-xl object-cover" style={{background:'#111'}} onError={e=>e.target.style.display='none'} alt="" />}
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold truncate">{item.title||'Untitled'}</p>
+                            <p className="text-[9px] text-gray-600 uppercase">{item.site}</p>
+                        </div>
+                    </div>
+                )}
+                <div className="flex gap-2 mb-4 overflow-x-auto hide-scroll flex-shrink-0 pb-1">
+                    {quick.map(a => (
+                        <button key={a.label} onClick={() => ask(a.p)}
+                            className="flex-shrink-0 glass px-4 py-2.5 rounded-full text-[9px] font-bold uppercase tracking-widest text-orange-400 hover:border-orange-500/30 transition-colors">
+                            {a.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex-1 glass rounded-2xl p-4 overflow-y-auto hide-scroll mb-4 min-h-[120px]">
+                    {loading ? (
+                        <div className="flex items-center gap-3 text-orange-400">
+                            <Loader className="w-4 h-4 animate-spin" />
+                            <span className="text-xs blink">Neural processing...</span>
+                        </div>
+                    ) : response ? (
+                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{response}</p>
+                    ) : (
+                        <p className="text-xs text-gray-700 italic">Pick a quick action or type a question below...</p>
+                    )}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                    <input ref={inputRef}
+                        className="flex-1 p-3.5 rounded-2xl text-sm outline-none"
+                        style={{background:'rgba(255,255,255,0.05)',border:'1px solid var(--border)'}}
+                        placeholder="Ask anything about this item..."
+                        value={q} onChange={e=>setQ(e.target.value)}
+                        onKeyDown={e => { if(e.key==='Enter'&&q.trim()){ ask(q+' '+ctx); setQ(''); }}}
+                        onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                        onBlur={e=>e.target.style.borderColor='var(--border)'}
+                    />
+                    <button
+                        onClick={() => { if(q.trim()){ ask(q+' '+ctx); setQ(''); }}}
+                        className="w-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                        style={{background:'#f97316'}}
+                    >
+                        <Send className="w-4 h-4 text-black" />
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ VIEWER ═══ */
+    const ItemViewer = ({ item, user, onClose, onPin, onDelete, onShare, onRefreshThumb, onAI }) => {
+        const videoRef = useRef(null);
+
+        useEffect(() => {
+            if (item?.type === 'hls' && videoRef.current && window.Hls?.isSupported()) {
+                const hls = new window.Hls();
+                hls.loadSource(item.url);
+                hls.attachMedia(videoRef.current);
+                hls.on(window.Hls.Events.MANIFEST_PARSED, () => videoRef.current.play());
+                return () => hls.destroy();
+            }
+        }, [item]);
+
+        if (!item) return null;
+        const ytId = getYtId(item.url);
+
+        return (
+            <div className="fixed inset-0 z-[100] overflow-y-auto hide-scroll animate-in" style={{background:'rgba(5,5,5,0.99)'}}>
+                <div className="max-w-5xl mx-auto p-4 pt-6 pb-24">
+                    <div className="flex justify-between items-center mb-5">
+                        <button onClick={onClose} className="glass w-10 h-10 rounded-full flex items-center justify-center">
+                            <X className="w-4 h-4" />
+                        </button>
+                        {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener"
+                                className="flex items-center gap-2 glass px-4 py-2 rounded-full text-[9px] font-bold uppercase tracking-widest text-gray-400 hover:text-orange-400 transition-colors">
+                                <ExternalLink className="w-3 h-3" /> Open Source
+                            </a>
+                        )}
+                    </div>
+
+                    {/* Media */}
+                    <div className="rounded-[24px] overflow-hidden mb-5" style={{background:'#0a0a0a',border:'1px solid var(--border)',minHeight:'200px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        {item.type === 'note' ? (
+                            <div className="p-8 w-full font-mono">
+                                <h2 className="syne text-2xl font-black mb-6 text-white">{item.title}</h2>
+                                <p className="text-gray-400 leading-relaxed whitespace-pre-wrap text-sm">{item.content}</p>
+                            </div>
+                        ) : item.type === 'youtube' ? (
+                            <div className="w-full" style={{aspectRatio:'16/9'}}>
+                                <iframe src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} className="w-full h-full" allow="autoplay; encrypted-media; fullscreen" allowFullScreen style={{border:'none'}} />
+                            </div>
+                        ) : item.type === 'hls' ? (
+                            <video ref={videoRef} controls autoPlay className="w-full" style={{maxHeight:'60vh'}} />
+                        ) : item.type === 'video' ? (
+                            <video src={item.url} controls autoPlay className="w-full" style={{maxHeight:'60vh'}} />
+                        ) : item.thumb ? (
+                            <img src={item.thumb} referrerPolicy="no-referrer" className="w-full h-auto block" style={{maxHeight:'65vh',objectFit:'contain'}} onError={e=>e.target.style.display='none'} alt={item.title} />
+                        ) : (
+                            <div className="p-12 flex flex-col items-center text-center">
+                                <LinkIcon className="w-12 h-12 text-orange-500/30 mb-4" />
+                                <p className="text-gray-600 text-sm">{item.title || item.site || 'Saved Link'}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="glass rounded-[24px] p-6">
+                        {item.site && <p className="text-[9px] font-bold uppercase tracking-widest text-orange-500 mb-1">{item.site}</p>}
+                        <h3 className="syne text-xl font-black mb-3">{item.title || 'Fragment'}</h3>
+                        {item.collection && <span className="tag-chip mb-4 inline-block">{item.collection}</span>}
+                        <p className="text-[9px] text-gray-700 uppercase mb-5">Saved {new Date(item.savedAt||0).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => onPin(item)} className={`btn-action ${item.pinned ? 'btn-pin' : 'btn-secondary'}`}>
+                                <Star className={`w-3.5 h-3.5 ${item.pinned ? 'fill-orange-400' : ''}`} />
+                                {item.pinned ? 'Pinned' : 'Pin'}
+                            </button>
+                            {item.url && (
+                                <button onClick={() => onShare(item)} className="btn-action btn-secondary">
+                                    <Share2 className="w-3.5 h-3.5" /> Share
+                                </button>
+                            )}
+                            <button onClick={() => onAI()} className="btn-action btn-ai col-span-2">
+                                <Bot className="w-3.5 h-3.5" /> Analyze with AI
+                            </button>
+                            {!item.thumb && item.url && item.type !== 'note' && (
+                                <button onClick={() => onRefreshThumb(item)} className="btn-action btn-secondary col-span-2">
+                                    <RefreshCw className="w-3.5 h-3.5" /> Fetch Thumbnail
+                                </button>
+                            )}
+                        </div>
+                        <button onClick={() => onDelete(item)} className="btn-action btn-danger w-full mt-2">
+                            <Trash2 className="w-3.5 h-3.5" /> Delete Artifact
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ ADD MODAL ═══ */
+    const AddModal = ({ onClose, onSave }) => {
+        const [type, setType] = useState('link');
+        const [form, setForm] = useState({ title:'', url:'', content:'', collection:'' });
+        const [fetching, setFetching] = useState(false);
+        const [previewThumb, setPreviewThumb] = useState(null);
+        const urlTimer = useRef(null);
+
+        const handleUrl = (url) => {
+            setForm(f => ({...f, url}));
+            setPreviewThumb(null);
+            clearTimeout(urlTimer.current);
+            if (url.length > 8) {
+                urlTimer.current = setTimeout(async () => {
+                    setFetching(true);
+                    const meta = await fetchSmartMeta(url);
+                    setForm(f => ({...f, title: f.title || meta.title || ''}));
+                    setPreviewThumb(meta.thumb);
+                    setFetching(false);
+                }, 900);
+            }
+        };
+
+        const handleSave = async () => {
+            if (type === 'link' && !form.url.trim()) return;
+            if (type === 'note' && !form.content.trim()) return;
+            await onSave({ ...form, addType: type });
+            onClose();
+        };
+
+        return (
+            <div className="modal-overlay animate-in" onClick={e => e.target===e.currentTarget && onClose()}>
+                <div className="w-full max-w-md glass rounded-[28px] p-7 shadow-2xl">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="syne text-xl font-black">New Artifact</h2>
+                        <button onClick={onClose}><X className="w-5 h-5 text-gray-600" /></button>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="flex gap-1.5 mb-6 p-1.5 rounded-2xl" style={{background:'#0a0a0a',border:'1px solid var(--border)'}}>
+                        {['link','note'].map(t => (
+                            <button key={t} onClick={() => setType(t)}
+                                className="flex-1 py-2.5 rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all"
+                                style={type===t ? {background:'rgba(255,255,255,0.08)',color:'#fff'} : {color:'#555'}}>
+                                {t === 'link' ? '⬡ Web Link' : '✍ Note'}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Thumb preview */}
+                    {previewThumb && (
+                        <div className="rounded-2xl overflow-hidden mb-4" style={{maxHeight:'140px'}}>
+                            <img src={previewThumb} referrerPolicy="no-referrer" className="w-full h-full object-cover" onError={e=>e.target.parentElement.style.display='none'} alt="" />
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        <input
+                            className="w-full p-4 rounded-2xl text-sm outline-none"
+                            style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                            placeholder={type==='link' ? 'Title (auto-filled from URL)...' : 'Note title...'}
+                            value={form.title}
+                            onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+                            onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                            onBlur={e=>e.target.style.borderColor='var(--border)'}
+                        />
+                        {type === 'link' ? (
+                            <div className="relative">
+                                <input
+                                    className="w-full p-4 pr-12 rounded-2xl text-sm outline-none"
+                                    style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                                    placeholder="Paste any URL — YouTube, Instagram, Pinterest, X..."
+                                    value={form.url}
+                                    onChange={e=>handleUrl(e.target.value)}
+                                    onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                                    onBlur={e=>e.target.style.borderColor='var(--border)'}
+                                />
+                                {fetching && (
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                        <Loader className="w-4 h-4 text-orange-500 animate-spin" />
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <textarea
+                                className="w-full p-4 rounded-2xl text-sm outline-none resize-none h-32"
+                                style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                                placeholder="Write your thought..."
+                                value={form.content}
+                                onChange={e=>setForm(f=>({...f,content:e.target.value}))}
+                                onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                                onBlur={e=>e.target.style.borderColor='var(--border)'}
+                            />
+                        )}
+                        <input
+                            className="w-full p-4 rounded-2xl text-sm outline-none"
+                            style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                            placeholder="Collection / Tag (e.g. Design, Inspo, Dev)..."
+                            value={form.collection}
+                            onChange={e=>setForm(f=>({...f,collection:e.target.value}))}
+                            onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.5)'}
+                            onBlur={e=>e.target.style.borderColor='var(--border)'}
+                        />
+                        <button onClick={handleSave} disabled={fetching}
+                            className="btn-action btn-primary"
+                            style={fetching?{opacity:0.6}:{}}>
+                            {fetching ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Fetching preview...</> : '+ Inject to Neural Vault'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    /* ═══ MAIN APP ═══ */
+    function App() {
+        const [user, setUser] = useState(null);
+        const [items, setItems] = useState([]);
+        const [search, setSearch] = useState('');
+        const [selectedItem, setSelectedItem] = useState(null);
+        const [showAdd, setShowAdd] = useState(false);
+        const [view, setView] = useState('grid');
+        const [filterCollection, setFilterCollection] = useState(null);
+        const [showSettings, setShowSettings] = useState(false);
+        const [showAI, setShowAI] = useState(false);
+        const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('nxs_gemini') || '');
+
+        /* Auth */
+        useEffect(() => {
+            const unsub = onAuthStateChanged(auth, u => {
+                if (!u) signInAnonymously(auth);
+                else setUser(u);
+            });
+            return unsub;
+        }, []);
+
+        /* Firestore */
+        useEffect(() => {
+            if (!user) return;
+            const path = collection(db, 'artifacts', APP_ID, 'users', user.uid, 'vault_items');
+            const unsub = onSnapshot(query(path), snap => {
+                const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                data.sort((a,b) => {
+                    if (a.pinned && !b.pinned) return -1;
+                    if (!a.pinned && b.pinned) return 1;
+                    return (b.savedAt||0) - (a.savedAt||0);
+                });
+                setItems(data);
+            });
+            return unsub;
+        }, [user]);
+
+        const filteredItems = useMemo(() => items.filter(i => {
+            const s = search.toLowerCase();
+            const matchSearch = !s || [i.title,i.site,i.content,i.collection].some(v => (v||'').toLowerCase().includes(s));
+            const matchCol = !filterCollection || i.collection === filterCollection;
+            return matchSearch && matchCol;
+        }), [items, search, filterCollection]);
+
+        const getPath = () => collection(db, 'artifacts', APP_ID, 'users', user.uid, 'vault_items');
+        const getDocRef = (id) => doc(db, 'artifacts', APP_ID, 'users', user.uid, 'vault_items', id);
+
+        const handleSave = async ({ title, url, content, collection: col, addType }) => {
+            if (!user) return;
+            const path = getPath();
+            let site = 'nexus.os';
+            try { if(url) site = new URL(url.startsWith('http')?url:`https://${url}`).hostname.replace('www.',''); } catch {}
+
+            if (addType === 'note') {
+                await addDoc(path, { title, content, collection: col, type: 'note', site, savedAt: Date.now(), thumb: null, pinned: false });
+                return;
+            }
+            const meta = await fetchSmartMeta(url);
+            const type = getMediaType(url);
+            await addDoc(path, {
+                title: title || meta.title || site,
+                url, collection: col, type, site,
+                savedAt: Date.now(),
+                thumb: meta.thumb,
+                pinned: false
+            });
+        };
+
+        const handlePin = async (item) => {
+            await updateDoc(getDocRef(item.id), { pinned: !item.pinned });
+            setSelectedItem(prev => prev?.id === item.id ? {...prev, pinned: !item.pinned} : prev);
+        };
+
+        const handleDelete = async (item) => {
+            if (!confirm('Delete this artifact?')) return;
+            await deleteDoc(getDocRef(item.id));
+            setSelectedItem(null);
+        };
+
+        const handleShare = (item) => {
+            if (navigator.share && item.url) {
+                navigator.share({ title: item.title || '', url: item.url }).catch(()=>{});
+            } else if (item.url) {
+                navigator.clipboard?.writeText(item.url).then(() => alert('Link copied to clipboard.')).catch(()=>{});
+            }
+        };
+
+        const handleRefreshThumb = async (item) => {
+            const meta = await fetchSmartMeta(item.url);
+            if (meta.thumb) {
+                await updateDoc(getDocRef(item.id), { thumb: meta.thumb });
+                setSelectedItem(prev => prev?.id === item.id ? {...prev, thumb: meta.thumb} : prev);
+            }
+        };
+
+        if (!user) return (
+            <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+                <Sparkles className="w-8 h-8 text-orange-500 blink" />
+                <p className="text-[10px] text-gray-700 uppercase tracking-widest">Initializing Neural Vault...</p>
+            </div>
+        );
+
+        return (
+            <div className="min-h-screen pb-32">
+                {/* HEADER */}
+                <header className="sticky top-0 z-40 p-4 pt-10" style={{background:'rgba(5,5,5,0.85)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderBottom:'1px solid var(--border)'}}>
+                    <div className="max-w-4xl mx-auto flex flex-col gap-4">
+                        <div className="flex justify-between items-center">
+                            <h1 className="syne text-xl font-black italic flex items-center gap-2 tracking-tight">
+                                <Sparkles className="w-5 h-5 text-orange-500" style={{fill:'#f97316'}} />
+                                NEXUS OS
+                            </h1>
+                            <div className="flex items-center gap-2">
+                                {filterCollection && (
+                                    <button onClick={() => setFilterCollection(null)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest"
+                                        style={{background:'rgba(249,115,22,0.12)',border:'1px solid rgba(249,115,22,0.3)',color:'#f97316'}}>
+                                        {filterCollection} <X className="w-3 h-3" />
+                                    </button>
+                                )}
+                                <button onClick={() => setShowSettings(true)} className="glass w-9 h-9 rounded-full flex items-center justify-center">
+                                    <Settings className="w-4 h-4 text-gray-500" />
+                                </button>
+                            </div>
+                        </div>
+                        {/* Search */}
+                        <div className="relative">
+                            <input
+                                className="w-full py-3.5 pl-11 pr-10 rounded-2xl text-sm outline-none"
+                                style={{background:'rgba(255,255,255,0.04)',border:'1px solid var(--border)'}}
+                                placeholder="Search titles, sites, notes, tags..."
+                                value={search} onChange={e=>setSearch(e.target.value)}
+                                onFocus={e=>e.target.style.borderColor='rgba(249,115,22,0.4)'}
+                                onBlur={e=>e.target.style.borderColor='var(--border)'}
+                            />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+                            {search && <button onClick={()=>setSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-gray-600" /></button>}
+                        </div>
+                        {/* Stats */}
+                        <div className="flex gap-2 overflow-x-auto hide-scroll pb-1">
+                            {[
+                                { label: `${items.length} SAVED` },
+                                { label: `${items.filter(i=>i.pinned).length} PINNED` },
+                                { label: `${[...new Set(items.map(i=>i.collection).filter(Boolean))].length} TAGS` },
+                                ...(filterCollection ? [{ label: `${filteredItems.length} IN "${filterCollection}"`, orange: true }] : []),
+                            ].map((s,i) => (
+                                <div key={i} className="flex-shrink-0 glass px-3 py-1.5 rounded-full" style={s.orange?{borderColor:'rgba(249,115,22,0.3)'}:{}}>
+                                    <span className="text-[9px] font-bold uppercase tracking-widest" style={{color:s.orange?'#f97316':'#555'}}>{s.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </header>
+
+                {/* GRID */}
+                <main className="max-w-4xl mx-auto p-4 mt-2">
+                    {filteredItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-24 text-center">
+                            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.1)'}}>
+                                <Sparkles className="w-7 h-7 text-orange-500/30" />
+                            </div>
+                            <p className="text-gray-700 text-sm">{search ? 'No matching fragments.' : 'Vault empty. Save your first fragment.'}</p>
+                        </div>
+                    ) : (
+                        <div className="masonry">
+                            {filteredItems.map(item => (
+                                <GridNode key={item.id} item={item} onClick={setSelectedItem} />
+                            ))}
+                        </div>
+                    )}
+                </main>
+
+                {/* BOTTOM NAV */}
+                <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3"
+                    style={{background:'rgba(10,10,10,0.9)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',border:'1px solid var(--border)',padding:'8px',borderRadius:'999px',boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
+                    <button onClick={() => setView('timeline')}
+                        className="w-11 h-11 rounded-full flex items-center justify-center transition-colors"
+                        style={{background:'rgba(255,255,255,0.04)'}}
+                        onMouseEnter={e=>e.currentTarget.style.color='#f97316'}
+                        onMouseLeave={e=>e.currentTarget.style.color='#555'}>
+                        <Clock className="w-5 h-5" style={{color:'inherit',transition:'color 0.2s'}} />
+                    </button>
+                    <button onClick={() => setShowAdd(true)}
+                        className="px-8 h-11 rounded-full font-black text-[10px] tracking-widest uppercase transition-transform active:scale-95"
+                        style={{background:'#f97316',color:'#000'}}>
+                        + Save
+                    </button>
+                    <button onClick={() => setView('collections')}
+                        className="w-11 h-11 rounded-full flex items-center justify-center transition-colors"
+                        style={{background:'rgba(255,255,255,0.04)'}}
+                        onMouseEnter={e=>e.currentTarget.style.color='#f97316'}
+                        onMouseLeave={e=>e.currentTarget.style.color='#555'}>
+                        <Folder className="w-5 h-5" style={{color:'inherit',transition:'color 0.2s'}} />
+                    </button>
+                </nav>
+
+                {/* MODALS */}
+                {showAdd && <AddModal onClose={() => setShowAdd(false)} onSave={handleSave} />}
+
+                {selectedItem && !showAI && (
+                    <ItemViewer
+                        item={selectedItem}
+                        user={user}
+                        onClose={() => setSelectedItem(null)}
+                        onPin={handlePin}
+                        onDelete={handleDelete}
+                        onShare={handleShare}
+                        onRefreshThumb={handleRefreshThumb}
+                        onAI={() => setShowAI(true)}
+                    />
+                )}
+
+                {view === 'timeline' && <TimelineView items={items} onClose={() => setView('grid')} onSelect={setSelectedItem} />}
+                {view === 'collections' && <CollectionsView items={items} onClose={() => setView('grid')} onFilter={c => { setFilterCollection(c); setView('grid'); }} />}
+                {showSettings && <SettingsModal onClose={() => setShowSettings(false)} geminiKey={geminiKey} setGeminiKey={setGeminiKey} />}
+                {showAI && <AiPanel item={selectedItem} geminiKey={geminiKey} onClose={() => setShowAI(false)} />}
+            </div>
+        );
+    }
+
+    createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
